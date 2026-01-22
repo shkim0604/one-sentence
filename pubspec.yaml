@@ -1,0 +1,39 @@
+name: one_sentence
+description: "배경화면에 한 문장을 담아 하루를 시작하세요"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI & Fonts
+  google_fonts: ^6.2.1
+  flutter_colorpicker: ^1.1.0
+  
+  # Image handling
+  image_picker: ^1.1.2
+  screenshot: ^3.0.0
+  image_gallery_saver: ^2.0.3
+  
+  # Storage & Permissions
+  path_provider: ^2.1.5
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.3.3
+  
+  # Wallpaper (Android)
+  wallpaper_manager_flutter: ^0.0.2
+  
+  # Utils
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
