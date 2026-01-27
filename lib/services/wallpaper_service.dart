@@ -32,38 +32,59 @@ class WallpaperService {
       }
       return status.isGranted;
     } else if (_isIOS) {
-      final status = await Permission.photos.request();
-      return status.isGranted;
+      // iOS 14+: photosAddOnly로 저장 전용 권한 요청
+      var status = await Permission.photosAddOnly.request();
+      
+      if (status.isGranted || status.isLimited) {
+        return true;
+      }
+      
+      // photosAddOnly가 안되면 photos 권한 시도
+      status = await Permission.photos.request();
+      
+      if (status.isPermanentlyDenied) {
+        // 설정으로 이동 안내
+        await openAppSettings();
+        return false;
+      }
+      
+      return status.isGranted || status.isLimited;
     }
     return true;
   }
 
   /// 이미지를 갤러리에 저장
-  static Future<String?> saveToGallery(Uint8List imageBytes) async {
+  static Future<Map<String, dynamic>> saveToGallery(Uint8List imageBytes) async {
     if (kIsWeb) {
       debugPrint('Gallery save not supported on web');
-      return null;
+      return {'success': false, 'error': '웹에서는 저장이 지원되지 않습니다.'};
     }
     
     try {
+      debugPrint('Requesting permissions...');
       final hasPermission = await requestPermissions();
+      debugPrint('Permission result: $hasPermission');
+      
       if (!hasPermission) {
-        return null;
+        return {'success': false, 'error': '사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.'};
       }
 
+      debugPrint('Saving image to gallery...');
       final result = await ImageGallerySaver.saveImage(
         imageBytes,
         quality: 100,
         name: 'one_sentence_${DateTime.now().millisecondsSinceEpoch}',
       );
+      
+      debugPrint('Save result: $result');
 
       if (result['isSuccess'] == true) {
-        return result['filePath'] as String?;
+        return {'success': true, 'filePath': result['filePath']};
       }
-      return null;
+      return {'success': false, 'error': '저장에 실패했습니다: ${result['error'] ?? '알 수 없는 오류'}'};
     } catch (e) {
       debugPrint('Error saving to gallery: $e');
-      return null;
+      return {'success': false, 'error': '오류가 발생했습니다: $e'};
     }
   }
 

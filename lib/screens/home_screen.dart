@@ -436,6 +436,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           child: TextField(
             controller: _sentenceController,
             maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onTapOutside: (_) => FocusScope.of(context).unfocus(),
             style: GoogleFonts.notoSans(
               fontSize: 18,
               color: Colors.white,
