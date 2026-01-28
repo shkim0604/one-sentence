@@ -1,4 +1,4 @@
-package com.example.one_sentence
+package org.delighthouse.oneqwall
 
 import android.app.WallpaperManager
 import android.graphics.Bitmap

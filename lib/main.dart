@@ -32,9 +32,7 @@ class OneSentenceApp extends StatelessWidget {
           surface: const Color(0xFF151520),
           onSurface: Colors.white,
         ),
-        textTheme: GoogleFonts.notoSansTextTheme(
-          ThemeData.dark().textTheme,
-        ),
+        textTheme: GoogleFonts.notoSansTextTheme(ThemeData.dark().textTheme),
         appBarTheme: AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
