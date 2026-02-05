@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:wallpaper_manager_flutter/wallpaper_manager_flutter.dart';
@@ -70,7 +70,7 @@ class WallpaperService {
       }
 
       debugPrint('Saving image to gallery...');
-      final result = await ImageGallerySaver.saveImage(
+      final result = await ImageGallerySaverPlus.saveImage(
         imageBytes,
         quality: 100,
         name: 'one_sentence_${DateTime.now().millisecondsSinceEpoch}',
@@ -119,23 +119,19 @@ class WallpaperService {
       final file = await saveToTemp(imageBytes);
       if (file == null) return false;
 
-      int wallpaperLocation;
+      final wallpaperManager = WallpaperManagerFlutter();
+      
       switch (location) {
         case WallpaperLocation.homeScreen:
-          wallpaperLocation = WallpaperManagerFlutter.HOME_SCREEN;
+          await wallpaperManager.setWallpaper(file.path, WallpaperManagerFlutter.homeScreen);
           break;
         case WallpaperLocation.lockScreen:
-          wallpaperLocation = WallpaperManagerFlutter.LOCK_SCREEN;
+          await wallpaperManager.setWallpaper(file.path, WallpaperManagerFlutter.lockScreen);
           break;
         case WallpaperLocation.both:
-          wallpaperLocation = WallpaperManagerFlutter.BOTH_SCREENS;
+          await wallpaperManager.setWallpaper(file.path, WallpaperManagerFlutter.bothScreens);
           break;
       }
-
-      await WallpaperManagerFlutter().setwallpaperfromFile(
-        file,
-        wallpaperLocation,
-      );
 
       return true;
     } catch (e) {

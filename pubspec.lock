@@ -220,10 +220,10 @@ packages:
     dependency: "direct main"
     description:
       name: google_fonts
-      sha256: ba03d03bcaa2f6cb7bd920e3b5027181db75ab524f8891c8bc3aa603885b8055
+      sha256: bf1fe61d4a53420a94cbbd4326e07702d247757926f6955af9667765a8324413
       url: "https://pub.dev"
     source: hosted
-    version: "6.3.3"
+    version: "8.0.0"
   hooks:
     dependency: transitive
     description:
@@ -256,14 +256,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.7.2"
-  image_gallery_saver:
+  image_gallery_saver_plus:
     dependency: "direct main"
     description:
-      name: image_gallery_saver
-      sha256: "0aba74216a4d9b0561510cb968015d56b701ba1bd94aace26aacdd8ae5761816"
+      name: image_gallery_saver_plus
+      sha256: "199b9e24f8d85e98f11e3d35571ab68ae50626ad40e2bb85c84383f69a6950ad"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.3"
+    version: "4.0.1"
   image_picker:
     dependency: "direct main"
     description:
@@ -276,10 +276,10 @@ packages:
     dependency: transitive
     description:
       name: image_picker_android
-      sha256: "297e42bd236c4ac4b091d4277292159b3280545e030cae2be3d503f9ecf7e6a1"
+      sha256: "518a16108529fc18657a3e6dde4a043dc465d16596d20ab2abd49a4cac2e703d"
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.13+12"
+    version: "0.8.13+13"
   image_picker_for_web:
     dependency: transitive
     description:
@@ -420,10 +420,10 @@ packages:
     dependency: transitive
     description:
       name: objective_c
-      sha256: "9922a1ad59ac5afb154cc948aa6ded01987a75003651d0a2866afc23f4da624e"
+      sha256: "7fd0c4d8ac8980011753b9bdaed2bf15111365924cdeeeaeb596214ea2b03537"
       url: "https://pub.dev"
     source: hosted
-    version: "9.2.3"
+    version: "9.2.4"
   path:
     dependency: transitive
     description:
@@ -484,18 +484,18 @@ packages:
     dependency: "direct main"
     description:
       name: permission_handler
-      sha256: "59adad729136f01ea9e35a48f5d1395e25cba6cea552249ddbe9cf950f5d7849"
+      sha256: bc917da36261b00137bbc8896bf1482169cd76f866282368948f032c8c1caae1
       url: "https://pub.dev"
     source: hosted
-    version: "11.4.0"
+    version: "12.0.1"
   permission_handler_android:
     dependency: transitive
     description:
       name: permission_handler_android
-      sha256: d3971dcdd76182a0c198c096b5db2f0884b0d4196723d21a866fc4cdea057ebc
+      sha256: "1e3bc410ca1bf84662104b100eb126e066cb55791b7451307f9708d4007350e6"
       url: "https://pub.dev"
     source: hosted
-    version: "12.1.0"
+    version: "13.0.1"
   permission_handler_apple:
     dependency: transitive
     description:
@@ -588,10 +588,10 @@ packages:
     dependency: transitive
     description:
       name: shared_preferences_android
-      sha256: "83af5c682796c0f7719c2bbf74792d113e40ae97981b8f266fa84574573556bc"
+      sha256: cbc40be9be1c5af4dab4d6e0de4d5d3729e6f3d65b89d21e1815d57705644a6f
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.18"
+    version: "2.4.20"
   shared_preferences_foundation:
     dependency: transitive
     description:
@@ -721,10 +721,10 @@ packages:
     dependency: "direct main"
     description:
       name: wallpaper_manager_flutter
-      sha256: "37286f08293ec62590448599b7dc3b94b11ee1175ab7b0e33cbf6b79fbfcba42"
+      sha256: afe9b419a91270e0bed2a76b1380bd4fe800a568494431bbf1d3308c0cdf39eb
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.2"
+    version: "1.0.1"
   web:
     dependency: transitive
     description:
