@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +21,7 @@ class WallpaperService {
   /// 권한 요청
   static Future<bool> requestPermissions() async {
     if (kIsWeb) return true;
-    
+
     if (_isAndroid) {
       final status = await Permission.storage.request();
       if (status.isDenied) {
@@ -34,39 +33,44 @@ class WallpaperService {
     } else if (_isIOS) {
       // iOS 14+: photosAddOnly로 저장 전용 권한 요청
       var status = await Permission.photosAddOnly.request();
-      
+
       if (status.isGranted || status.isLimited) {
         return true;
       }
-      
+
       // photosAddOnly가 안되면 photos 권한 시도
       status = await Permission.photos.request();
-      
+
       if (status.isPermanentlyDenied) {
         // 설정으로 이동 안내
         await openAppSettings();
         return false;
       }
-      
+
       return status.isGranted || status.isLimited;
     }
     return true;
   }
 
   /// 이미지를 갤러리에 저장
-  static Future<Map<String, dynamic>> saveToGallery(Uint8List imageBytes) async {
+  static Future<Map<String, dynamic>> saveToGallery(
+    Uint8List imageBytes,
+  ) async {
     if (kIsWeb) {
       debugPrint('Gallery save not supported on web');
       return {'success': false, 'error': '웹에서는 저장이 지원되지 않습니다.'};
     }
-    
+
     try {
       debugPrint('Requesting permissions...');
       final hasPermission = await requestPermissions();
       debugPrint('Permission result: $hasPermission');
-      
+
       if (!hasPermission) {
-        return {'success': false, 'error': '사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.'};
+        return {
+          'success': false,
+          'error': '사진 라이브러리 접근 권한이 필요합니다.\n설정에서 권한을 허용해주세요.',
+        };
       }
 
       debugPrint('Saving image to gallery...');
@@ -75,13 +79,16 @@ class WallpaperService {
         quality: 100,
         name: 'one_sentence_${DateTime.now().millisecondsSinceEpoch}',
       );
-      
+
       debugPrint('Save result: $result');
 
       if (result['isSuccess'] == true) {
         return {'success': true, 'filePath': result['filePath']};
       }
-      return {'success': false, 'error': '저장에 실패했습니다: ${result['error'] ?? '알 수 없는 오류'}'};
+      return {
+        'success': false,
+        'error': '저장에 실패했습니다: ${result['error'] ?? '알 수 없는 오류'}',
+      };
     } catch (e) {
       debugPrint('Error saving to gallery: $e');
       return {'success': false, 'error': '오류가 발생했습니다: $e'};
@@ -91,7 +98,7 @@ class WallpaperService {
   /// 임시 파일로 저장
   static Future<File?> saveToTemp(Uint8List imageBytes) async {
     if (kIsWeb) return null;
-    
+
     try {
       final directory = await getTemporaryDirectory();
       final filePath =
@@ -114,22 +121,31 @@ class WallpaperService {
       // 웹 및 iOS는 시스템 제약으로 직접 배경화면 설정 불가
       return false;
     }
-    
+
     try {
       final file = await saveToTemp(imageBytes);
       if (file == null) return false;
 
       final wallpaperManager = WallpaperManagerFlutter();
-      
+
       switch (location) {
         case WallpaperLocation.homeScreen:
-          await wallpaperManager.setWallpaper(file.path, WallpaperManagerFlutter.homeScreen);
+          await wallpaperManager.setWallpaper(
+            file.path,
+            WallpaperManagerFlutter.homeScreen,
+          );
           break;
         case WallpaperLocation.lockScreen:
-          await wallpaperManager.setWallpaper(file.path, WallpaperManagerFlutter.lockScreen);
+          await wallpaperManager.setWallpaper(
+            file.path,
+            WallpaperManagerFlutter.lockScreen,
+          );
           break;
         case WallpaperLocation.both:
-          await wallpaperManager.setWallpaper(file.path, WallpaperManagerFlutter.bothScreens);
+          await wallpaperManager.setWallpaper(
+            file.path,
+            WallpaperManagerFlutter.bothScreens,
+          );
           break;
       }
 
@@ -146,7 +162,7 @@ class WallpaperService {
       // 웹 및 iOS는 보안상의 이유로 현재 배경화면에 접근 불가
       return null;
     }
-    
+
     try {
       final Uint8List? wallpaperBytes = await _channel.invokeMethod(
         'getCurrentWallpaper',

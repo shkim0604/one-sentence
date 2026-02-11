@@ -23,11 +23,19 @@ class _EditorScreenState extends State<EditorScreen>
   int _selectedPresetIndex = 0;
   bool _isProcessing = false;
 
-  // 드래그 위치 (0.0 ~ 1.0 비율)
-  Offset _textPosition = const Offset(0.5, 0.4);
+  // 편집 가능한 문장 텍스트
+  late String _editableSentence;
+  bool _isEditingText = false;
+  late TextEditingController _textEditController;
+  final FocusNode _textEditFocusNode = FocusNode();
 
-  // 텍스트 GlobalKey (경계 체크용)
-  final GlobalKey _textKey = GlobalKey();
+  // 텍스트 상자 경계 (비율: 0.0 ~ 1.0)
+  // left, top, right, bottom
+  Rect _textBoxRect = const Rect.fromLTRB(0.075, 0.35, 0.925, 0.55);
+
+  // 리사이즈 핸들 관련
+  String?
+  _activeResizeHandle; // topLeft, topRight, bottomLeft, bottomRight, left, right, top, bottom
 
   // 배경 이미지 조정
   double _imageScale = 1.0;
@@ -40,6 +48,9 @@ class _EditorScreenState extends State<EditorScreen>
 
   // 미리보기 컨테이너 크기 (스케일 계산용)
   Size _previewSize = Size.zero;
+
+  // iOS 잠금화면 시계 오버레이 표시 여부
+  bool _showIOSClockOverlay = false;
 
   // 사용 가능한 폰트 목록
   final List<String> _availableFonts = [
@@ -70,17 +81,44 @@ class _EditorScreenState extends State<EditorScreen>
   void initState() {
     super.initState();
     _style = StylePresets.presets[0];
+    _editableSentence = widget.sentence;
+    _textEditController = TextEditingController(text: _editableSentence);
     _animController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
     _animController.forward();
+
+    _textEditFocusNode.addListener(() {
+      if (!_textEditFocusNode.hasFocus && _isEditingText) {
+        _finishTextEditing();
+      }
+    });
   }
 
   @override
   void dispose() {
     _animController.dispose();
+    _textEditController.dispose();
+    _textEditFocusNode.dispose();
     super.dispose();
+  }
+
+  void _finishTextEditing() {
+    setState(() {
+      _editableSentence = _textEditController.text;
+      _isEditingText = false;
+    });
+  }
+
+  void _startTextEditing() {
+    _textEditController.text = _editableSentence;
+    setState(() {
+      _isEditingText = true;
+    });
+    Future.delayed(const Duration(milliseconds: 100), () {
+      _textEditFocusNode.requestFocus();
+    });
   }
 
   Future<Uint8List?> _captureWallpaper() async {
@@ -120,13 +158,14 @@ class _EditorScreenState extends State<EditorScreen>
 
     // 스케일 적용된 값들
     final scaledFontSize = _style.fontSize * scale;
-    final scaledPadding = 24.0 * scale;
     final scaledShadowBlur = _style.shadowBlur * scale;
     final scaledLetterSpacing = _style.letterSpacing * scale;
     final scaledShadowOffset = 2.0 * scale;
 
-    // 텍스트 위치 계산 (비율 기반이라 스케일 불필요)
-    final textTop = screenSize.height * _textPosition.dy;
+    // 텍스트 상자 위치 계산 (비율 -> 픽셀)
+    final textLeft = screenSize.width * _textBoxRect.left;
+    final textTop = screenSize.height * _textBoxRect.top;
+    final textRight = screenSize.width * (1 - _textBoxRect.right);
 
     // 이미지 오프셋도 스케일 적용
     final scaledImageOffset = Offset(
@@ -186,13 +225,13 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ),
 
-          // 텍스트
+          // 텍스트 (좌우 위치 및 너비 적용)
           Positioned(
-            left: scaledPadding,
-            right: scaledPadding,
+            left: textLeft,
+            right: textRight,
             top: textTop.clamp(40.0 * scale, screenSize.height - 100 * scale),
             child: Text(
-              widget.sentence,
+              _editableSentence,
               textAlign: _style.textAlign,
               style: GoogleFonts.getFont(
                 _style.fontFamily,
@@ -543,9 +582,9 @@ class _EditorScreenState extends State<EditorScreen>
                       Navigator.pop(context);
                     },
                     title: Text(
-                      widget.sentence.length > 20
-                          ? '${widget.sentence.substring(0, 20)}...'
-                          : widget.sentence,
+                      _editableSentence.length > 20
+                          ? '${_editableSentence.substring(0, 20)}...'
+                          : _editableSentence,
                       style: GoogleFonts.getFont(
                         font,
                         fontSize: 18,
@@ -621,7 +660,8 @@ class _EditorScreenState extends State<EditorScreen>
               child: Center(
                 child: AspectRatio(
                   // 실제 폰 화면 비율 사용
-                  aspectRatio: MediaQuery.of(context).size.width /
+                  aspectRatio:
+                      MediaQuery.of(context).size.width /
                       MediaQuery.of(context).size.height,
                   child: Container(
                     decoration: BoxDecoration(
@@ -670,10 +710,62 @@ class _EditorScreenState extends State<EditorScreen>
                                   Text(
                                     _isEditingImage
                                         ? '핀치로 확대, 드래그로 위치 조절'
-                                        : '텍스트를 드래그하여 위치 조절',
+                                        : '드래그: 이동 | 모서리: 크기 조절 | 더블탭: 편집',
                                     style: GoogleFonts.notoSans(
                                       fontSize: 10,
-                                      color: Colors.white.withValues(alpha: 0.8),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // iOS 시계 오버레이 토글 버튼
+                        Positioned(
+                          left: 8,
+                          top: 8,
+                          child: GestureDetector(
+                            onTap: () => setState(
+                              () =>
+                                  _showIOSClockOverlay = !_showIOSClockOverlay,
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _showIOSClockOverlay
+                                    ? const Color(
+                                        0xFF7C4DFF,
+                                      ).withValues(alpha: 0.8)
+                                    : Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.access_time,
+                                    color: Colors.white.withValues(
+                                      alpha: _showIOSClockOverlay ? 1.0 : 0.6,
+                                    ),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'iOS 시계',
+                                    style: GoogleFonts.notoSans(
+                                      fontSize: 11,
+                                      color: Colors.white.withValues(
+                                        alpha: _showIOSClockOverlay ? 1.0 : 0.6,
+                                      ),
+                                      fontWeight: _showIOSClockOverlay
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
                                     ),
                                   ),
                                 ],
@@ -828,7 +920,7 @@ class _EditorScreenState extends State<EditorScreen>
                     _buildSectionTitle('폰트 크기: ${_style.fontSize.toInt()}'),
                     Slider(
                       value: _style.fontSize,
-                      min: 14,
+                      min: 5,
                       max: 48,
                       activeColor: const Color(0xFF7C4DFF),
                       inactiveColor: const Color(0xFF2A2A3A),
@@ -863,15 +955,13 @@ class _EditorScreenState extends State<EditorScreen>
           }
         });
 
-        // 패딩 값
-        const horizontalPadding = 24.0;
-
-        // 텍스트 위치 계산 (비율 -> 실제 좌표)
-        // 텍스트가 화면 밖으로 나가지 않도록 제한
-        const minY = 20.0;
-        final maxY = containerHeight - 60.0; // 텍스트 높이 여유분
-
-        final textTop = (containerHeight * _textPosition.dy).clamp(minY, maxY);
+        // 텍스트 상자 실제 좌표 계산 (비율 -> 픽셀)
+        final textBoxLeft = containerWidth * _textBoxRect.left;
+        final textBoxTop = containerHeight * _textBoxRect.top;
+        final textBoxRight = containerWidth * _textBoxRect.right;
+        final textBoxBottom = containerHeight * _textBoxRect.bottom;
+        final textBoxWidth = textBoxRight - textBoxLeft;
+        final textBoxHeight = textBoxBottom - textBoxTop;
 
         return GestureDetector(
           // 이미지 편집 모드일 때만 이미지 조작
@@ -953,76 +1043,356 @@ class _EditorScreenState extends State<EditorScreen>
                     ),
                   ),
 
-                // 드래그 가능한 텍스트 (텍스트 편집 모드일 때만)
-                Positioned(
-                  left: horizontalPadding,
-                  right: horizontalPadding,
-                  top: textTop,
-                  child: GestureDetector(
-                    onPanUpdate: !_isEditingImage
-                        ? (details) {
-                            setState(() {
-                              // 새 위치 계산
-                              double newDy =
-                                  _textPosition.dy +
-                                  (details.delta.dy / containerHeight);
-
-                              // 경계 체크: 텍스트가 화면 밖으로 나가지 않도록
-                              // 상단 최소 5%, 하단 최대 85%
-                              newDy = newDy.clamp(0.05, 0.85);
-
-                              _textPosition = Offset(_textPosition.dx, newDy);
-                              _style = _style.copyWith(
-                                textPosition: _textPosition,
-                              );
-                            });
-                          }
-                        : null,
-                    child: Container(
-                      key: _textKey,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        // 텍스트 편집 모드일 때 테두리 표시
-                        border:
-                            !_isEditingImage && widget.backgroundImage != null
-                            ? Border.all(
-                                color: Colors.white.withValues(alpha: 0.3),
-                                width: 1,
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        widget.sentence,
-                        textAlign: _style.textAlign,
-                        style: GoogleFonts.getFont(
-                          _style.fontFamily,
-                          fontSize: _style.fontSize,
-                          fontWeight: _style.fontWeight,
-                          color: _style.textColor,
-                          letterSpacing: _style.letterSpacing,
-                          height: _style.lineHeight,
-                          shadows: [
-                            Shadow(
-                              color: _style.shadowColor,
-                              blurRadius: _style.shadowBlur,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
+                // 리사이즈 가능한 텍스트 상자
+                if (!_isEditingImage)
+                  Positioned(
+                    left: textBoxLeft,
+                    top: textBoxTop,
+                    width: textBoxWidth,
+                    height: textBoxHeight,
+                    child: _buildResizableTextBox(
+                      containerWidth,
+                      containerHeight,
+                      textBoxWidth,
+                      textBoxHeight,
                     ),
                   ),
-                ),
+
+                // iOS 잠금화면 시계 오버레이 (미리보기용)
+                if (_showIOSClockOverlay)
+                  _buildIOSClockOverlay(containerWidth, containerHeight),
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  /// iOS 잠금화면 시계 오버레이 위젯
+  Widget _buildIOSClockOverlay(double width, double height) {
+    // iOS 잠금화면 시계 위치 및 크기 (실제 iOS 비율 모사)
+    // 시계는 화면 상단 약 15-20% 위치에 있음
+    final clockTop = height * 0.15;
+    final timeFontSize = height * 0.11; // 시간 폰트 크기
+    final dateFontSize = height * 0.022; // 날짜 폰트 크기
+
+    // 현재 시간 가져오기
+    final now = DateTime.now();
+    final timeString =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    // 요일 한글 변환
+    final weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+    final weekday = weekdays[now.weekday % 7];
+    final dateString = '${now.month}월 ${now.day}일 $weekday요일';
+
+    return Positioned(
+      top: clockTop,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 날짜
+            Text(
+              dateString,
+              style: TextStyle(
+                fontFamily: '.SF UI Display',
+                fontSize: dateFontSize,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.5),
+                letterSpacing: 0.5,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: height * 0.005),
+            // 시간
+            Text(
+              timeString,
+              style: TextStyle(
+                fontFamily: '.SF UI Display',
+                fontSize: timeFontSize,
+                fontWeight: FontWeight.w300,
+                color: Colors.white.withValues(alpha: 0.5),
+                letterSpacing: -2,
+                height: 1.0,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 리사이즈 가능한 텍스트 상자 위젯
+  Widget _buildResizableTextBox(
+    double containerWidth,
+    double containerHeight,
+    double boxWidth,
+    double boxHeight,
+  ) {
+    const handleSize = 12.0;
+    const halfHandle = handleSize / 2;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 메인 텍스트 영역 (드래그 이동 + 더블탭 편집)
+        Positioned.fill(
+          child: GestureDetector(
+            onDoubleTap: _startTextEditing,
+            onPanUpdate: (details) {
+              if (_activeResizeHandle != null) return;
+              setState(() {
+                final dx = details.delta.dx / containerWidth;
+                final dy = details.delta.dy / containerHeight;
+
+                final newLeft = (_textBoxRect.left + dx).clamp(
+                  0.02,
+                  0.98 - _textBoxRect.width,
+                );
+                final newTop = (_textBoxRect.top + dy).clamp(
+                  0.02,
+                  0.98 - _textBoxRect.height,
+                );
+
+                _textBoxRect = Rect.fromLTWH(
+                  newLeft,
+                  newTop,
+                  _textBoxRect.width,
+                  _textBoxRect.height,
+                );
+              });
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: _isEditingText
+                      ? const Color(0xFF7C4DFF)
+                      : Colors.white.withValues(alpha: 0.4),
+                  width: _isEditingText ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: _isEditingText
+                  ? TextField(
+                      controller: _textEditController,
+                      focusNode: _textEditFocusNode,
+                      maxLines: null,
+                      textAlign: _style.textAlign,
+                      style: GoogleFonts.getFont(
+                        _style.fontFamily,
+                        fontSize: _style.fontSize,
+                        fontWeight: _style.fontWeight,
+                        color: _style.textColor,
+                        letterSpacing: _style.letterSpacing,
+                        height: _style.lineHeight,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onSubmitted: (_) => _finishTextEditing(),
+                    )
+                  : Text(
+                      _editableSentence,
+                      textAlign: _style.textAlign,
+                      style: GoogleFonts.getFont(
+                        _style.fontFamily,
+                        fontSize: _style.fontSize,
+                        fontWeight: _style.fontWeight,
+                        color: _style.textColor,
+                        letterSpacing: _style.letterSpacing,
+                        height: _style.lineHeight,
+                        shadows: [
+                          Shadow(
+                            color: _style.shadowColor,
+                            blurRadius: _style.shadowBlur,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ),
+
+        // 리사이즈 핸들들 (텍스트 편집 중이 아닐 때만)
+        if (!_isEditingText) ...[
+          // 좌상단
+          _buildResizeHandle(
+            left: -halfHandle,
+            top: -halfHandle,
+            cursor: SystemMouseCursors.resizeUpLeft,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'topLeft'),
+          ),
+          // 우상단
+          _buildResizeHandle(
+            right: -halfHandle,
+            top: -halfHandle,
+            cursor: SystemMouseCursors.resizeUpRight,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'topRight'),
+          ),
+          // 좌하단
+          _buildResizeHandle(
+            left: -halfHandle,
+            bottom: -halfHandle,
+            cursor: SystemMouseCursors.resizeDownLeft,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'bottomLeft'),
+          ),
+          // 우하단
+          _buildResizeHandle(
+            right: -halfHandle,
+            bottom: -halfHandle,
+            cursor: SystemMouseCursors.resizeDownRight,
+            onPanUpdate: (d) => _handleResize(
+              d,
+              containerWidth,
+              containerHeight,
+              'bottomRight',
+            ),
+          ),
+          // 상단 중앙
+          _buildResizeHandle(
+            left: boxWidth / 2 - halfHandle,
+            top: -halfHandle,
+            cursor: SystemMouseCursors.resizeUp,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'top'),
+          ),
+          // 하단 중앙
+          _buildResizeHandle(
+            left: boxWidth / 2 - halfHandle,
+            bottom: -halfHandle,
+            cursor: SystemMouseCursors.resizeDown,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'bottom'),
+          ),
+          // 좌측 중앙
+          _buildResizeHandle(
+            left: -halfHandle,
+            top: boxHeight / 2 - halfHandle,
+            cursor: SystemMouseCursors.resizeLeft,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'left'),
+          ),
+          // 우측 중앙
+          _buildResizeHandle(
+            right: -halfHandle,
+            top: boxHeight / 2 - halfHandle,
+            cursor: SystemMouseCursors.resizeRight,
+            onPanUpdate: (d) =>
+                _handleResize(d, containerWidth, containerHeight, 'right'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildResizeHandle({
+    double? left,
+    double? right,
+    double? top,
+    double? bottom,
+    required MouseCursor cursor,
+    required void Function(DragUpdateDetails) onPanUpdate,
+  }) {
+    const handleSize = 12.0;
+
+    return Positioned(
+      left: left,
+      right: right,
+      top: top,
+      bottom: bottom,
+      child: MouseRegion(
+        cursor: cursor,
+        child: GestureDetector(
+          onPanUpdate: onPanUpdate,
+          child: Container(
+            width: handleSize,
+            height: handleSize,
+            decoration: BoxDecoration(
+              color: const Color(0xFF7C4DFF),
+              border: Border.all(color: Colors.white, width: 1.5),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleResize(
+    DragUpdateDetails details,
+    double containerWidth,
+    double containerHeight,
+    String handleType,
+  ) {
+    setState(() {
+      final dx = details.delta.dx / containerWidth;
+      final dy = details.delta.dy / containerHeight;
+
+      double newLeft = _textBoxRect.left;
+      double newTop = _textBoxRect.top;
+      double newRight = _textBoxRect.right;
+      double newBottom = _textBoxRect.bottom;
+
+      const minSize = 0.1; // 최소 10%
+      const maxSize = 0.96; // 최대 96%
+
+      switch (handleType) {
+        case 'topLeft':
+          newLeft = (newLeft + dx).clamp(0.02, newRight - minSize);
+          newTop = (newTop + dy).clamp(0.02, newBottom - minSize);
+          break;
+        case 'topRight':
+          newRight = (newRight + dx).clamp(newLeft + minSize, maxSize);
+          newTop = (newTop + dy).clamp(0.02, newBottom - minSize);
+          break;
+        case 'bottomLeft':
+          newLeft = (newLeft + dx).clamp(0.02, newRight - minSize);
+          newBottom = (newBottom + dy).clamp(newTop + minSize, maxSize);
+          break;
+        case 'bottomRight':
+          newRight = (newRight + dx).clamp(newLeft + minSize, maxSize);
+          newBottom = (newBottom + dy).clamp(newTop + minSize, maxSize);
+          break;
+        case 'top':
+          newTop = (newTop + dy).clamp(0.02, newBottom - minSize);
+          break;
+        case 'bottom':
+          newBottom = (newBottom + dy).clamp(newTop + minSize, maxSize);
+          break;
+        case 'left':
+          newLeft = (newLeft + dx).clamp(0.02, newRight - minSize);
+          break;
+        case 'right':
+          newRight = (newRight + dx).clamp(newLeft + minSize, maxSize);
+          break;
+      }
+
+      _textBoxRect = Rect.fromLTRB(newLeft, newTop, newRight, newBottom);
+    });
   }
 
   Widget _buildModeButton({
@@ -1087,9 +1457,7 @@ class _EditorScreenState extends State<EditorScreen>
             onTap: () {
               setState(() {
                 _selectedPresetIndex = index;
-                _style = StylePresets.presets[index].copyWith(
-                  textPosition: _textPosition,
-                );
+                _style = StylePresets.presets[index];
               });
             },
             child: AnimatedContainer(
