@@ -15,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _sentenceController = TextEditingController();
+  final FocusNode _sentenceFocusNode = FocusNode();
   final ImagePicker _picker = ImagePicker();
   File? _selectedImage;
   List<String> _recentSentences = [];
@@ -26,6 +27,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _loadRecentSentences();
+    _sentenceFocusNode.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
     _animController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -40,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void dispose() {
     _sentenceController.dispose();
+    _sentenceFocusNode.dispose();
     _animController.dispose();
     super.dispose();
   }
@@ -315,77 +322,109 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0A0A0F),
-              Color(0xFF151525),
-              Color(0xFF0D0D15),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnim,
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 40),
-                        // 앱 타이틀
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Color(0xFF7C4DFF), Color(0xFFFF6B9D)],
-                          ).createShader(bounds),
-                          child: Text(
-                            '한 문장',
-                            style: GoogleFonts.notoSans(
-                              fontSize: 42,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              height: 1.2,
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0A0A0F),
+                  Color(0xFF151525),
+                  Color(0xFF0D0D15),
+                ],
+              ),
+            ),
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 40),
+                            // 앱 타이틀
+                            ShaderMask(
+                              shaderCallback: (bounds) => const LinearGradient(
+                                colors: [Color(0xFF7C4DFF), Color(0xFFFF6B9D)],
+                              ).createShader(bounds),
+                              child: Text(
+                                '한 문장',
+                                style: GoogleFonts.notoSans(
+                                  fontSize: 42,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '오늘 하루를 함께할 문장을 입력하세요',
+                              style: GoogleFonts.notoSans(
+                                fontSize: 16,
+                                color: Colors.white.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 48),
+
+                            // 문장 입력 섹션
+                            _buildSentenceInput(),
+                            const SizedBox(height: 32),
+
+                            // 배경 이미지 선택 섹션
+                            _buildImageSelector(),
+                            const SizedBox(height: 40),
+
+                            // 배경화면 만들기 버튼
+                            _buildCreateButton(),
+                            const SizedBox(height: 48),
+
+                            // 최근 문장 섹션
+                            if (_recentSentences.isNotEmpty)
+                              _buildRecentSentences(),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '오늘 하루를 함께할 문장을 입력하세요',
-                          style: GoogleFonts.notoSans(
-                            fontSize: 16,
-                            color: Colors.white.withValues(alpha: 0.6),
-                          ),
-                        ),
-                        const SizedBox(height: 48),
-
-                        // 문장 입력 섹션
-                        _buildSentenceInput(),
-                        const SizedBox(height: 32),
-
-                        // 배경 이미지 선택 섹션
-                        _buildImageSelector(),
-                        const SizedBox(height: 40),
-
-                        // 배경화면 만들기 버튼
-                        _buildCreateButton(),
-                        const SizedBox(height: 48),
-
-                        // 최근 문장 섹션
-                        if (_recentSentences.isNotEmpty) _buildRecentSentences(),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          if (_sentenceFocusNode.hasFocus)
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+              child: GestureDetector(
+                onTap: () {
+                  _sentenceFocusNode.unfocus();
+                },
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7C4DFF),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -435,8 +474,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           child: TextField(
             controller: _sentenceController,
+            focusNode: _sentenceFocusNode,
             maxLines: 4,
-            textInputAction: TextInputAction.done,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
             onTapOutside: (_) => FocusScope.of(context).unfocus(),
             style: GoogleFonts.notoSans(
               fontSize: 18,

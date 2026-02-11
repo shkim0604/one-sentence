@@ -76,6 +76,7 @@ class _EditorScreenState extends State<EditorScreen>
   int _selectedGradientIndex = 0;
 
   late AnimationController _animController;
+  bool _didAutoFit = false;
 
   @override
   void initState() {
@@ -157,7 +158,13 @@ class _EditorScreenState extends State<EditorScreen>
     debugPrint('Scale factor: $scale');
 
     // 스케일 적용된 값들
-    final scaledFontSize = _style.fontSize * scale;
+    final fittedFontSize = _fitFontSizeForBox(
+      _editableSentence,
+      _style,
+      screenSize.width * (1 - _textBoxRect.left - (1 - _textBoxRect.right)),
+      screenSize.height * (_textBoxRect.bottom - _textBoxRect.top),
+    );
+    final scaledFontSize = fittedFontSize * scale;
     final scaledShadowBlur = _style.shadowBlur * scale;
     final scaledLetterSpacing = _style.letterSpacing * scale;
     final scaledShadowOffset = 2.0 * scale;
@@ -620,6 +627,7 @@ class _EditorScreenState extends State<EditorScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0F),
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
@@ -650,8 +658,10 @@ class _EditorScreenState extends State<EditorScreen>
             ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
+          Column(
+            children: [
           // 미리보기 영역 - 실제 화면 비율로 표시
           Expanded(
             flex: 5,
@@ -707,15 +717,20 @@ class _EditorScreenState extends State<EditorScreen>
                                     size: 14,
                                   ),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    _isEditingImage
-                                        ? '핀치로 확대, 드래그로 위치 조절'
-                                        : '드래그: 이동 | 모서리: 크기 조절 | 더블탭: 편집',
-                                    style: GoogleFonts.notoSans(
-                                      fontSize: 10,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.8,
+                                  Flexible(
+                                    child: Text(
+                                      _isEditingImage
+                                          ? '핀치로 확대, 드래그로 위치 조절'
+                                          : '드래그: 이동 | 모서리: 크기 조절 | 더블탭: 편집',
+                                      style: GoogleFonts.notoSans(
+                                        fontSize: 10,
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
                                       ),
+                                      softWrap: true,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],
@@ -936,6 +951,35 @@ class _EditorScreenState extends State<EditorScreen>
               ),
             ),
           ),
+            ],
+          ),
+          if (_isEditingText)
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+              child: GestureDetector(
+                onTap: () {
+                  _finishTextEditing();
+                  FocusScope.of(context).unfocus();
+                },
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7C4DFF),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -953,6 +997,7 @@ class _EditorScreenState extends State<EditorScreen>
               _previewSize.height != containerHeight) {
             _previewSize = Size(containerWidth, containerHeight);
           }
+          _autoFitInitialText(containerWidth, containerHeight);
         });
 
         // 텍스트 상자 실제 좌표 계산 (비율 -> 픽셀)
@@ -964,6 +1009,21 @@ class _EditorScreenState extends State<EditorScreen>
         final textBoxHeight = textBoxBottom - textBoxTop;
 
         return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTapDown: (details) {
+            if (!_isEditingText) return;
+            final tap = details.localPosition;
+            final boxRect = Rect.fromLTWH(
+              textBoxLeft,
+              textBoxTop,
+              textBoxWidth,
+              textBoxHeight,
+            );
+            if (!boxRect.contains(tap)) {
+              _finishTextEditing();
+              FocusScope.of(context).unfocus();
+            }
+          },
           // 이미지 편집 모드일 때만 이미지 조작
           onScaleStart: widget.backgroundImage != null && _isEditingImage
               ? (details) {
@@ -1069,6 +1129,61 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
+  void _autoFitInitialText(double containerWidth, double containerHeight) {
+    if (_didAutoFit) return;
+    if (_editableSentence.trim().isEmpty) {
+      _didAutoFit = true;
+      return;
+    }
+
+    final textBoxLeft = containerWidth * _textBoxRect.left;
+    final textBoxTop = containerHeight * _textBoxRect.top;
+    final textBoxRight = containerWidth * _textBoxRect.right;
+    final textBoxBottom = containerHeight * _textBoxRect.bottom;
+    final textBoxWidth = textBoxRight - textBoxLeft;
+    final textBoxHeight = textBoxBottom - textBoxTop;
+
+    // TextField padding in _buildResizableTextBox is 8 on all sides.
+    final availableWidth = (textBoxWidth - 16).clamp(0.0, double.infinity);
+    final availableHeight = (textBoxHeight - 16).clamp(0.0, double.infinity);
+
+    double fontSize = _style.fontSize;
+    const double minFontSize = 8.0;
+
+    bool fits(double size) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: _editableSentence,
+          style: GoogleFonts.getFont(
+            _style.fontFamily,
+            fontSize: size,
+            fontWeight: _style.fontWeight,
+            letterSpacing: _style.letterSpacing,
+            height: _style.lineHeight,
+          ),
+        ),
+        textAlign: _style.textAlign,
+        textDirection: TextDirection.ltr,
+      );
+      painter.layout(maxWidth: availableWidth);
+      return painter.height <= availableHeight;
+    }
+
+    int guard = 0;
+    while (!fits(fontSize) && fontSize > minFontSize && guard < 60) {
+      fontSize -= 1.0;
+      guard += 1;
+    }
+
+    if (fontSize != _style.fontSize) {
+      setState(() {
+        _style = _style.copyWith(fontSize: fontSize);
+      });
+    }
+
+    _didAutoFit = true;
+  }
+
   /// iOS 잠금화면 시계 오버레이 위젯
   Widget _buildIOSClockOverlay(double width, double height) {
     // iOS 잠금화면 시계 위치 및 크기 (실제 iOS 비율 모사)
@@ -1146,6 +1261,14 @@ class _EditorScreenState extends State<EditorScreen>
     double boxWidth,
     double boxHeight,
   ) {
+    final fittedSize = _fitFontSizeForBox(
+      _editableSentence,
+      _style,
+      boxWidth - 16,
+      boxHeight - 16,
+      allowGrow: true,
+    );
+
     const handleSize = 12.0;
     const halfHandle = handleSize / 2;
 
@@ -1195,10 +1318,13 @@ class _EditorScreenState extends State<EditorScreen>
                       controller: _textEditController,
                       focusNode: _textEditFocusNode,
                       maxLines: null,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
                       textAlign: _style.textAlign,
+                      textAlignVertical: TextAlignVertical.top,
                       style: GoogleFonts.getFont(
                         _style.fontFamily,
-                        fontSize: _style.fontSize,
+                        fontSize: fittedSize,
                         fontWeight: _style.fontWeight,
                         color: _style.textColor,
                         letterSpacing: _style.letterSpacing,
@@ -1209,14 +1335,13 @@ class _EditorScreenState extends State<EditorScreen>
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onSubmitted: (_) => _finishTextEditing(),
                     )
                   : Text(
                       _editableSentence,
                       textAlign: _style.textAlign,
                       style: GoogleFonts.getFont(
                         _style.fontFamily,
-                        fontSize: _style.fontSize,
+                        fontSize: fittedSize,
                         fontWeight: _style.fontWeight,
                         color: _style.textColor,
                         letterSpacing: _style.letterSpacing,
@@ -1309,6 +1434,61 @@ class _EditorScreenState extends State<EditorScreen>
     );
   }
 
+  double _fitFontSizeForBox(
+    String text,
+    WallpaperStyle style,
+    double maxWidth,
+    double maxHeight, {
+    bool allowGrow = false,
+  }
+  ) {
+    if (text.trim().isEmpty) return style.fontSize;
+    final availableWidth = maxWidth.clamp(0.0, double.infinity);
+    final availableHeight = maxHeight.clamp(0.0, double.infinity);
+    if (availableWidth == 0.0 || availableHeight == 0.0) {
+      return style.fontSize;
+    }
+
+    double fontSize = style.fontSize;
+    const double minFontSize = 8.0;
+    const double maxFontSize = 48.0;
+    int guard = 0;
+
+    bool fits(double size) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: GoogleFonts.getFont(
+            style.fontFamily,
+            fontSize: size,
+            fontWeight: style.fontWeight,
+            letterSpacing: style.letterSpacing,
+            height: style.lineHeight,
+          ),
+        ),
+        textAlign: style.textAlign,
+        textDirection: TextDirection.ltr,
+      );
+      painter.layout(maxWidth: availableWidth);
+      return painter.height <= availableHeight;
+    }
+
+    while (!fits(fontSize) && fontSize > minFontSize && guard < 60) {
+      fontSize -= 1.0;
+      guard += 1;
+    }
+
+    if (allowGrow) {
+      guard = 0;
+      while (fits(fontSize + 1.0) && fontSize < maxFontSize && guard < 60) {
+        fontSize += 1.0;
+        guard += 1;
+      }
+    }
+
+    return fontSize;
+  }
+
   Widget _buildResizeHandle({
     double? left,
     double? right,
@@ -1392,6 +1572,19 @@ class _EditorScreenState extends State<EditorScreen>
       }
 
       _textBoxRect = Rect.fromLTRB(newLeft, newTop, newRight, newBottom);
+
+      final boxWidth = containerWidth * (_textBoxRect.right - _textBoxRect.left);
+      final boxHeight = containerHeight * (_textBoxRect.bottom - _textBoxRect.top);
+      final fittedSize = _fitFontSizeForBox(
+        _editableSentence,
+        _style,
+        boxWidth - 16,
+        boxHeight - 16,
+        allowGrow: true,
+      );
+      if (fittedSize != _style.fontSize) {
+        _style = _style.copyWith(fontSize: fittedSize);
+      }
     });
   }
 
